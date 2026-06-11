@@ -322,6 +322,21 @@ void CollectiveCommunicator::create_process_groups(
     port += dp_size;
   }
 
+  if (cp_size > 1) {
+    int32_t tp_size = world_size / (dp_size * cp_size);
+    port_offset = global_rank % tp_size + 1;
+    cp_cross_group_ = create_process_group(global_rank,
+                                           world_size,
+                                           cp_size,
+                                           port + port_offset,
+                                           true,
+                                           host,
+                                           "cp_cross_group",
+                                           device);
+    parallel_args_->cp_cross_group_ = cp_cross_group_.get();
+    port += tp_size;
+  }
+
 #if defined(USE_NPU)
   if (::xllm::KernelConfig::get_instance().npu_kernel_backend() == "ATB") {
     return;
