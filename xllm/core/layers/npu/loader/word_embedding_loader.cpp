@@ -14,6 +14,9 @@ limitations under the License.
 ==============================================================================*/
 #include "word_embedding_loader.h"
 
+#include "core/framework/config/parallel_config.h"
+#include "core/util/utils.h"
+
 namespace xllm {
 namespace layer {
 
@@ -23,7 +26,17 @@ WordEmbeddingLoader::WordEmbeddingLoader(uint64_t weight_count,
     : BaseLoader(weight_count, context, mode) {}
 
 void WordEmbeddingLoader::load_state_dict(const StateDict& state_dict) {
-  if (dp_size_ > 1 || cp_size_ > 1) {
+  const int64_t embedding_tp_size =
+      ::xllm::ParallelConfig::get_instance().embedding_tp_size();
+  if (util::parallel_in_worldsize(embedding_tp_size)) {
+    set_weight(state_dict,
+               "weight",
+               0,
+               1,
+               parallel_args_.rank(),
+               embedding_tp_size,
+               load_to_host());
+  } else if (dp_size_ > 1 || cp_size_ > 1) {
     set_weight(state_dict,
                "weight",
                0,

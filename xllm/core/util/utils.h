@@ -30,6 +30,7 @@ limitations under the License.
 
 #include "core/common/types.h"
 #include "core/framework/config/disagg_pd_config.h"
+#include "core/framework/config/distributed_config.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/util/json_reader.h"
 #include "core/util/model_config_utils.h"
@@ -215,6 +216,13 @@ inline int32_t kv_split_size_effective(void) {
 }
 
 inline bool enable_kvcache_split(void) { return kv_split_size_effective() > 1; }
+
+inline bool parallel_in_worldsize(int64_t parallel_size) {
+  ParallelConfig& parallel_config = ParallelConfig::get_instance();
+  DistributedConfig& distributed_config = DistributedConfig::get_instance();
+  return (parallel_config.cp_size() > 1) &&
+         (parallel_size == distributed_config.nnodes());
+}
 
 }  // namespace util
 }  // namespace xllm

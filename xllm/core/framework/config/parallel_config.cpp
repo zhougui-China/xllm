@@ -69,6 +69,14 @@ DEFINE_bool(
     "Whether to enable dp load balance, if true, sequences within a single "
     "dp batch will be shuffled.");
 
+DEFINE_int64(embedding_tp_size,
+             0,
+             "Tensor parallelism size for embedding layer in ATB mode. 0 means "
+             "use tp_size "
+             "(default), >0 means use the specified value (e.g., world_size). "
+             "Only effective "
+             "in ATB backend.");
+
 namespace xllm {
 
 void ParallelConfig::from_flags() {
@@ -85,6 +93,7 @@ void ParallelConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_multi_stream_parallel);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(micro_batch_num);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_dp_balance);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(embedding_tp_size);
 }
 
 void ParallelConfig::from_json(const JsonReader& json) {
@@ -100,6 +109,7 @@ void ParallelConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_multi_stream_parallel);
   XLLM_CONFIG_ASSIGN_FROM_JSON(micro_batch_num);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_dp_balance);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(embedding_tp_size);
 }
 
 void ParallelConfig::append_config_json(
@@ -124,6 +134,8 @@ void ParallelConfig::append_config_json(
       config_json, default_config, micro_batch_num);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_dp_balance);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, embedding_tp_size);
 }
 
 ParallelConfig& ParallelConfig::get_instance() {

@@ -19,6 +19,8 @@ limitations under the License.
 
 #include "core/framework/config/load_config.h"
 #include "core/framework/config/parallel_config.h"
+#include "core/util/utils.h"
+
 namespace xllm {
 namespace layer {
 
@@ -29,8 +31,12 @@ void NpuWordEmbeddingImpl::param_from_args(
   param.unpadInputs = true;
 
   if (parallel_args.world_size() > 1) {
+    const int64_t embedding_tp_size =
+        ::xllm::ParallelConfig::get_instance().embedding_tp_size();
     if (parallel_args.mapping_data().empty()) {
-      const bool use_local_tp = (dp_size_ > 1) || (cp_size_ > 1);
+      const bool use_local_tp =
+          ((dp_size_ > 1 || cp_size_ > 1) &&
+           embedding_tp_size != parallel_args.world_size());
       if (use_local_tp) {
         param.tensorParallelInfo.rank = dp_local_tp_rank_;
         param.tensorParallelInfo.worldSize = dp_local_tp_size_;
@@ -44,8 +50,13 @@ void NpuWordEmbeddingImpl::param_from_args(
       param.tensorParallelInfo.backend =
           ::xllm::ParallelConfig::get_instance().communication_backend();
     } else {
-      atb_speed::common::ParallelInfo parallelInfo =
-          parallel_args.mapping().Get(atb_speed::base::ATTN_TP);
+      atb_speed::common::ParallelInfo parallelInfo;
+      if (util::parallel_in_worldsize(embedding_tp_size)) {
+        parallelInfo =
+            parallel_args.mapping().Get(atb_speed::base::WORD_EMBED_TP);
+      } else {
+        parallelInfo = parallel_args.mapping().Get(atb_speed::base::ATTN_TP);
+      }
       param.tensorParallelInfo.rank = parallelInfo.rank;
       param.tensorParallelInfo.worldSize = parallelInfo.rankIds.size();
       param.tensorParallelInfo.backend =
@@ -112,7 +123,6 @@ int64_t NpuWordEmbeddingImpl::init_node(
 torch::Tensor NpuWordEmbeddingImpl::forward(const torch::Tensor& x,
                                             int nodeId) {
   atb::Status st;
-  // std::cout<<"x:"<<x<<std::endl;
   build_node_variant_pack(embedding_node_, x);
   st = execute_node(embedding_node_, nodeId);
   LOG_IF(FATAL, st != 0) << modelName_

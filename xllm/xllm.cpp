@@ -252,6 +252,7 @@ void validate_config(const std::string& model_type) {
   SchedulerConfig& scheduler_config = SchedulerConfig::get_instance();
   ParallelConfig& parallel_config = ParallelConfig::get_instance();
   DisaggPDConfig& disagg_pd_config = DisaggPDConfig::get_instance();
+  DistributedConfig& distributed_config = DistributedConfig::get_instance();
 
   if (model_config.backend().empty()) {
     LOG(FATAL) << "Model is not supported currently, model type: "
@@ -326,6 +327,24 @@ void validate_config(const std::string& model_type) {
     LOG(FATAL) << "rolling_load_num_rolling_slots must be <= "
                << "rolling_load_num_cached_layers.";
   }
+
+  const int64_t embedding_tp_size = parallel_config.embedding_tp_size();
+  const int64_t tp_size = parallel_config.tp_size();
+  const int64_t dp_size = parallel_config.dp_size();
+  const int64_t world_size = distributed_config.nnodes();
+  if (embedding_tp_size != 0 && embedding_tp_size != tp_size &&
+      embedding_tp_size != world_size) {
+    LOG(FATAL) << "embedding_tp_size " << embedding_tp_size
+               << " is not valid. Must be 0, "
+               << "equal to tp_size (" << tp_size << ")"
+               << "or equal to world_size (" << world_size << ").";
+  }
+  if (dp_size > 1 && (embedding_tp_size != 0 || embedding_tp_size != tp_size)) {
+    LOG(FATAL) << "In Data Parallel scenarios, "
+               << "Tensor Parallel of word embedding weights "
+               << "across the world_size scope is not supported.";
+  }
+
 #else
   if (kv_cache_config.enable_xtensor()) {
     LOG(FATAL) << "enable_xtensor is only supported on NPU.";

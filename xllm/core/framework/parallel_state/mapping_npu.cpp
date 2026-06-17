@@ -21,6 +21,9 @@ limitations under the License.
 #include <cstdlib>
 #include <limits>
 
+#include "core/framework/config/parallel_config.h"
+#include "core/util/utils.h"
+
 #define MAX_LCCL_COMM_DOMAIN 63
 #define ENV_enable_extra_o_proj_tp false
 #define ENV_lm_head_local_tp false
@@ -72,6 +75,8 @@ MappingNPU::MappingNPU(const std::string rank_table_file,
   num_nodes_ = get_num_nodes();
   world_size_ = world_size;
   local_world_size_ = world_size / num_nodes_;
+  embedding_tp_size_ =
+      ::xllm::ParallelConfig::get_instance().embedding_tp_size();
   attn_o_proj_tp_.backend("hccl");
   attn_inner_sp_.backend("hccl");
   parse_parallel_info();
@@ -114,6 +119,9 @@ MappingNPU::MappingNPU(const std::string rank_table_file,
     get_domain(attn_tp_, attn_dp_, 0);
     get_domain(attn_dp_, attn_tp_, attn_dp_.group_size());
     get_domain(attn_cp_, attn_tp_, attn_cp_.group_size());
+  }
+  if (util::parallel_in_worldsize(embedding_tp_size_)) {
+    get_domain(word_embed_tp_, word_embed_dp_, 0);
   }
   get_domain(moe_tp_, moe_ep_, 2 * world_size_);
   get_domain(moe_ep_, moe_tp_, 2 * world_size_ + moe_ep_.group_size());
@@ -217,7 +225,11 @@ void MappingNPU::parse_parallel_info() {
   attn_kv_split_.backend("hccl");
 
   // word embed
-  word_embed_tp_ = ParallelInfo(attn_tp_);
+  if (util::parallel_in_worldsize(embedding_tp_size_)) {
+    word_embed_tp_.group_size(world_size_);
+  } else {
+    word_embed_tp_ = ParallelInfo(attn_tp_);
+  }
   word_embed_dp_ = ParallelInfo(attn_dp_);
   // lm_head
   if (ENV_enable_dp_partition_up) {

@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "core/framework/model/model_output.h"
 #include "core/layers/npu/npu_deepseek_v32_decoder_layer_impl.h"
+#include "core/util/utils.h"
 #include "llm_model_base.h"
 
 // DeepSeek v32 compatible with huggingface weights
@@ -193,6 +194,8 @@ class DeepseekV32ModelImpl : public torch::nn::Module {
     auto model_args = context.get_model_args();
     auto parallel_args = context.get_parallel_args();
 
+    cp_cross_group_ = parallel_args.cp_cross_group_;
+
     blocks_ = register_module("layers", torch::nn::ModuleList());
     layers_.reserve(model_args.n_layers());
     // register submodules
@@ -244,6 +247,8 @@ class DeepseekV32ModelImpl : public torch::nn::Module {
     for (int i = 0; i < parallel_args.world_size(); i += dp_local_tp_size_) {
       indices.push_back(i);
     }
+    embedding_tp_size_ =
+        ::xllm::ParallelConfig::get_instance().embedding_tp_size();
   }
 
   ModelOutput forward(torch::Tensor tokens,
@@ -257,7 +262,15 @@ class DeepseekV32ModelImpl : public torch::nn::Module {
       }
     }
 
+    if (xllm::util::parallel_in_worldsize(embedding_tp_size_) &&
+        cp_cross_group_ != nullptr) {
+      tokens = xllm::parallel_state::gather(tokens, cp_cross_group_);
+    }
     auto h = npu_embed_tokens_(tokens, 0);
+    if (xllm::util::parallel_in_worldsize(embedding_tp_size_) &&
+        cp_cross_group_ != nullptr) {
+      h = xllm::parallel_state::scatter(h, cp_cross_group_, 0);
+    }
     auto cos_sin = atb_pos_emb_(cos_sin_, positions, 0);
     auto cos_sin_chunks = cos_sin.chunk(/*chunks=*/2, /*dim=*/-1);
     auto cos_pos = cos_sin_chunks[0].contiguous();
@@ -451,6 +464,8 @@ class DeepseekV32ModelImpl : public torch::nn::Module {
   int32_t rank_;
   int32_t dp_size_;
   int32_t dp_local_tp_size_;
+  int64_t embedding_tp_size_;
+  ProcessGroup* cp_cross_group_ = nullptr;
   nlohmann::json mapping_data_;
   int32_t num_experts_per_tok_;
   int32_t num_speculative_tokens_ = 0;
