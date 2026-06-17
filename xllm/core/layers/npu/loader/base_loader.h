@@ -236,7 +236,8 @@ class BaseLoader {
                                  int rank,
                                  int world_size) const;
 
-  int64_t get_padded_vocab_size(const ModelContext& context) const;
+  int64_t get_padded_vocab_size(const ModelContext& context,
+                                int32_t tp_size) const;
 
   // -------------------- data members --------------------------------------
   uint64_t weight_count_;

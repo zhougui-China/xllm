@@ -15,6 +15,9 @@ limitations under the License.
 
 #include "lm_head_loader.h"
 
+#include "core/framework/config/parallel_config.h"
+#include "core/util/utils.h"
+
 namespace xllm {
 namespace layer {
 
@@ -29,12 +32,29 @@ LmHeadLoader::LmHeadLoader(uint64_t weight_count,
     working_tensors()[0] = torch::zeros({1}).to(options);
   }
   vocab_size_ = context.get_model_args().vocab_size();
-  padded_vocab_size_ = get_padded_vocab_size(context);
+  const int64_t lmhead_tp_size =
+      ::xllm::ParallelConfig::get_instance().lmhead_tp_size();
+  if (util::parallel_in_worldsize(lmhead_tp_size)) {
+    padded_vocab_size_ = get_padded_vocab_size(context, lmhead_tp_size);
+  } else {
+    padded_vocab_size_ = get_padded_vocab_size(context, dp_local_tp_size_);
+  }
 }
 
 void LmHeadLoader::load_state_dict(const StateDict& state_dict) {
   const bool to_host = load_to_host();
-  if (cp_size_ > 1 || dp_size_ > 1) {
+  const int64_t lmhead_tp_size =
+      ::xllm::ParallelConfig::get_instance().lmhead_tp_size();
+  if (util::parallel_in_worldsize(lmhead_tp_size)) {
+    set_weight_with_padding(state_dict,
+                            "weight",
+                            0,
+                            0,
+                            parallel_args_.rank(),
+                            lmhead_tp_size,
+                            padded_vocab_size_,
+                            to_host);
+  } else if (cp_size_ > 1 || dp_size_ > 1) {
     set_weight_with_padding(state_dict,
                             "weight",
                             0,

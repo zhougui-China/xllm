@@ -53,7 +53,8 @@ class ParallelConfig final {
          "enable_multi_stream_parallel",
          "micro_batch_num",
          "enable_dp_balance",
-         "embedding_tp_size"}};
+         "embedding_tp_size",
+         "lmhead_tp_size"}};
     return kOptionCategory;
   }
 
@@ -85,6 +86,8 @@ class ParallelConfig final {
   PROPERTY(bool, enable_dp_balance) = false;
 
   PROPERTY(int64_t, embedding_tp_size) = 0;
+
+  PROPERTY(int64_t, lmhead_tp_size) = 0;
 
   [[nodiscard]] int32_t kv_split_size_effective() const noexcept {
     return kv_split_size_ > 0 ? kv_split_size_ : cp_size_;

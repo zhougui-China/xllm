@@ -329,6 +329,7 @@ void validate_config(const std::string& model_type) {
   }
 
   const int64_t embedding_tp_size = parallel_config.embedding_tp_size();
+  const int64_t lmhead_tp_size = parallel_config.lmhead_tp_size();
   const int64_t tp_size = parallel_config.tp_size();
   const int64_t dp_size = parallel_config.dp_size();
   const int64_t world_size = distributed_config.nnodes();
@@ -342,6 +343,19 @@ void validate_config(const std::string& model_type) {
   if (dp_size > 1 && (embedding_tp_size != 0 || embedding_tp_size != tp_size)) {
     LOG(FATAL) << "In Data Parallel scenarios, "
                << "Tensor Parallel of word embedding weights "
+               << "across the world_size scope is not supported.";
+  }
+
+  if (lmhead_tp_size != 0 && lmhead_tp_size != tp_size &&
+      lmhead_tp_size != world_size) {
+    LOG(FATAL) << "lmhead_tp_size " << lmhead_tp_size
+               << " is not valid. Must be 0, "
+               << "equal to tp_size "
+               << "or equal to world_size (" << world_size << ")";
+  }
+  if (dp_size > 1 && (lmhead_tp_size != 0 || lmhead_tp_size != tp_size)) {
+    LOG(FATAL) << "In Data Parallel scenarios, "
+               << "Tensor Parallel of lm head weights "
                << "across the world_size scope is not supported.";
   }
 

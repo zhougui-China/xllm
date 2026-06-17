@@ -159,6 +159,7 @@ class MappingNPU final {
   int32_t rank_ = 0;
   int32_t local_world_size_ = 0;
   int64_t embedding_tp_size_ = 0;
+  int64_t lmhead_tp_size_ = 0;
   ParallelInfo word_embed_tp_ = ParallelInfo();
   ParallelInfo word_embed_dp_ = ParallelInfo();
   ParallelInfo attn_tp_ = ParallelInfo();

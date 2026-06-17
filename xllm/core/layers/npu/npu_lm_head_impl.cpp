@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "core/framework/config/load_config.h"
 #include "core/framework/config/parallel_config.h"
+#include "core/util/utils.h"
 
 namespace xllm {
 namespace layer {
@@ -37,8 +38,12 @@ void NpuLmHeadImpl::param_from_args(atb_speed::common::LmHeadParam& param,
   param.linearParallelParam.fusionLinearParam.transposeType = 1;
 
   if (parallel_args.world_size() > 1) {
+    const int64_t lmhead_tp_size =
+        ::xllm::ParallelConfig::get_instance().lmhead_tp_size();
     if (parallel_args.mapping_data().empty()) {
-      const bool use_local_tp = (dp_size_ > 1) || (cp_size_ > 1);
+      const bool use_local_tp =
+          (dp_size_ > 1) ||
+          (cp_size_ > 1) && lmhead_tp_size != parallel_args.world_size();
       if (use_local_tp) {
         CHECK_GT(dp_local_tp_size_, 0);
         CHECK_GE(dp_local_tp_rank_, 0);
@@ -63,8 +68,12 @@ void NpuLmHeadImpl::param_from_args(atb_speed::common::LmHeadParam& param,
     } else {
       param.linearParallelParam.parallelType =
           atb_speed::common::COLUMN_PARALLEL;
-      atb_speed::common::ParallelInfo parallelInfo =
-          parallel_args.mapping().Get(atb_speed::base::ATTN_TP);
+      atb_speed::common::ParallelInfo parallelInfo;
+      if (util::parallel_in_worldsize(lmhead_tp_size)) {
+        parallelInfo = parallel_args.mapping().Get(atb_speed::base::LM_HEAD_TP);
+      } else {
+        parallelInfo = parallel_args.mapping().Get(atb_speed::base::ATTN_TP);
+      }
       param.linearParallelParam.tensorParallelInfo.rank = parallelInfo.rank;
       param.linearParallelParam.tensorParallelInfo.worldSize =
           parallelInfo.rankIds.size();
@@ -81,11 +90,17 @@ void NpuLmHeadImpl::param_from_args(atb_speed::common::LmHeadParam& param,
 
 NpuLmHeadImpl::NpuLmHeadImpl(const ModelContext& context) : BaseLayer(context) {
   vocab_size_ = context.get_model_args().vocab_size();
-  if (vocab_size_ > 0 && dp_local_tp_size_ > 1 &&
-      vocab_size_ % dp_local_tp_size_ != 0) {
+  const int64_t lmhead_tp_size =
+      ::xllm::ParallelConfig::get_instance().lmhead_tp_size();
+  int32_t padding_tp_size = dp_local_tp_size_;
+  if (util::parallel_in_worldsize(lmhead_tp_size)) {
+    padding_tp_size = lmhead_tp_size;
+  }
+  if (vocab_size_ > 0 && padding_tp_size > 1 &&
+      vocab_size_ % padding_tp_size != 0) {
     padded_vocab_size_ =
-        ((vocab_size_ + dp_local_tp_size_ - 1) / dp_local_tp_size_) *
-        dp_local_tp_size_;
+        ((vocab_size_ + padding_tp_size - 1) / padding_tp_size) *
+        padding_tp_size;
   } else {
     padded_vocab_size_ = vocab_size_;
   }

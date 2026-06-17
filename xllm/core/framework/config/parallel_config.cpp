@@ -77,6 +77,14 @@ DEFINE_int64(embedding_tp_size,
              "Only effective "
              "in ATB backend.");
 
+DEFINE_int64(lmhead_tp_size,
+             0,
+             "Tensor parallelism size for lm head layer in ATB mode. 0 means "
+             "use tp_size "
+             "(default), >0 means use the specified value (e.g., world_size). "
+             "Only effective "
+             "in ATB backend.");
+
 namespace xllm {
 
 void ParallelConfig::from_flags() {
@@ -94,6 +102,7 @@ void ParallelConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(micro_batch_num);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_dp_balance);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(embedding_tp_size);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(lmhead_tp_size);
 }
 
 void ParallelConfig::from_json(const JsonReader& json) {
@@ -110,6 +119,7 @@ void ParallelConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(micro_batch_num);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_dp_balance);
   XLLM_CONFIG_ASSIGN_FROM_JSON(embedding_tp_size);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(lmhead_tp_size);
 }
 
 void ParallelConfig::append_config_json(
@@ -136,6 +146,8 @@ void ParallelConfig::append_config_json(
       config_json, default_config, enable_dp_balance);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, embedding_tp_size);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, lmhead_tp_size);
 }
 
 ParallelConfig& ParallelConfig::get_instance() {

@@ -77,6 +77,7 @@ MappingNPU::MappingNPU(const std::string rank_table_file,
   local_world_size_ = world_size / num_nodes_;
   embedding_tp_size_ =
       ::xllm::ParallelConfig::get_instance().embedding_tp_size();
+  lmhead_tp_size_ = ::xllm::ParallelConfig::get_instance().lmhead_tp_size();
   attn_o_proj_tp_.backend("hccl");
   attn_inner_sp_.backend("hccl");
   parse_parallel_info();
@@ -234,7 +235,11 @@ void MappingNPU::parse_parallel_info() {
   // lm_head
   if (ENV_enable_dp_partition_up) {
     if (!ENV_lm_head_local_tp) {
-      lm_head_tp_ = ParallelInfo(attn_tp_);
+      if (util::parallel_in_worldsize(lmhead_tp_size_)) {
+        lm_head_tp_.group_size(world_size_);
+      } else {
+        lm_head_tp_ = ParallelInfo(attn_tp_);
+      }
       lm_head_dp_ = ParallelInfo(attn_dp_);
     }
   } else {
